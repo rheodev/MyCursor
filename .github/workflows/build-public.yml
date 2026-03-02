@@ -1,0 +1,90 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { os: windows-latest, name: Windows }
+          - { os: macos-latest, name: macOS }
+          - { os: ubuntu-22.04, name: Linux }
+
+    runs-on: ${{ matrix.platform.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: ${{ matrix.platform.os }}
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run tauri:build
+
+      - name: Upload Release - Windows
+        if: matrix.platform.os == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/MyCursor.exe
+          body: |
+            ## MyCursor ${{ github.ref_name }}
+
+            | 平台 | 文件 | 说明 |
+            |------|------|------|
+            | Windows | `MyCursor.exe` | 免安装，双击运行 |
+            | macOS | `.dmg` | 拖入 Applications |
+            | Linux | `.AppImage` / `.deb` | AppImage 免安装 |
+
+      - name: Upload Release - macOS
+        if: matrix.platform.os == 'macos-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src-tauri/target/release/bundle/dmg/*.dmg
+
+      - name: Upload Release - Linux
+        if: matrix.platform.os == 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
