@@ -1,4 +1,4 @@
-import { useState, useRef, memo, useCallback } from "react";
+import { useState, useEffect, useRef, memo, useCallback } from "react";
 import { AccountService } from "../services/accountService";
 import { invoke } from "@tauri-apps/api/core";
 import { base64URLEncode, K, sha256 } from "../utils/cursorToken";
@@ -19,9 +19,6 @@ interface AddAccountFormProps {
 }
 
 export const AddAccountForm = memo(({ isOpen, onSuccess, onCancel, onToast }: AddAccountFormProps) => {
-  // ============================================================
-  // 📦 状态管理
-  // ============================================================
   const [addAccountType, setAddAccountType] = useState<AccountType>("token");
   const [newEmail, setNewEmail] = useState("");
   const [newToken, setNewToken] = useState("");
@@ -40,6 +37,27 @@ export const AddAccountForm = memo(({ isOpen, onSuccess, onCancel, onToast }: Ad
 
   const currentEmailRef = useRef<string>("");
   const autoLoginTimerRef = useRef<number | null>(null);
+
+  // 每次打开弹窗时重置为全新表单
+  useEffect(() => {
+    if (isOpen) {
+      setAddAccountType("token");
+      setNewEmail("");
+      setNewToken("");
+      setNewPassword("");
+      setNewRefreshToken("");
+      setNewWorkosSessionToken("");
+      setAutoLoginLoading(false);
+      setShowLoginWindow(false);
+      setFetchingAccessToken(false);
+      setShowCancelLoginButton(false);
+      setNewTags([]);
+      setShowMachineIds(false);
+      setMachineIdsJson("");
+      setMachineIdsParseError("");
+      setParsedMachineIds({});
+    }
+  }, [isOpen]);
 
   // ============================================================
   // 🎯 业务逻辑（使用 useCallback 优化）
@@ -84,7 +102,7 @@ export const AddAccountForm = memo(({ isOpen, onSuccess, onCancel, onToast }: Ad
     }
   }, []);
 
-  // 处理获取AccessToken按钮点击，同时调用 /api/auth/me 获取用户信息
+  // 获取 AccessToken 并通过 /api/auth/me 自动填充邮箱
   const handleFetchAccessToken = useCallback(async () => {
     if (!newWorkosSessionToken.trim()) {
       onToast("请先输入 WorkOS Session Token", "error");
@@ -94,28 +112,25 @@ export const AddAccountForm = memo(({ isOpen, onSuccess, onCancel, onToast }: Ad
     setFetchingAccessToken(true);
     try {
       const result: any = await getClientAccessToken(newWorkosSessionToken.trim());
-      if (result && result.accessToken) {
-        setNewToken(result.accessToken);
-        if (result.refreshToken) {
-          setNewRefreshToken(result.refreshToken);
-        }
+      if (!result?.accessToken) {
+        onToast("获取 AccessToken 失败，请检查 WorkOS Session Token 是否正确", "error");
+        return;
+      }
 
-        // 同时调用 /api/auth/me 获取用户详细信息
-        try {
-          const meResult = await AccountService.getAuthMe(newWorkosSessionToken.trim());
-          if (meResult.success && meResult.data) {
-            if (meResult.data.email && !newEmail) {
-              setNewEmail(meResult.data.email);
-            }
-            onToast(`AccessToken 获取成功！用户: ${meResult.data.name || meResult.data.email}`, "success");
-          } else {
-            onToast("AccessToken 获取成功！", "success");
-          }
-        } catch {
+      setNewToken(result.accessToken);
+      if (result.refreshToken) setNewRefreshToken(result.refreshToken);
+
+      // 调用 /api/auth/me 获取用户信息，始终填充邮箱
+      try {
+        const meResult = await AccountService.getAuthMe(newWorkosSessionToken.trim());
+        if (meResult.success && meResult.data?.email) {
+          setNewEmail(meResult.data.email);
+          onToast(`获取成功！用户: ${meResult.data.name || meResult.data.email}`, "success");
+        } else {
           onToast("AccessToken 获取成功！", "success");
         }
-      } else {
-        onToast("获取 AccessToken 失败，请检查 WorkOS Session Token 是否正确", "error");
+      } catch {
+        onToast("AccessToken 获取成功！", "success");
       }
     } catch (error) {
       console.error("获取 AccessToken 失败:", error);
@@ -123,7 +138,7 @@ export const AddAccountForm = memo(({ isOpen, onSuccess, onCancel, onToast }: Ad
     } finally {
       setFetchingAccessToken(false);
     }
-  }, [newWorkosSessionToken, newEmail, getClientAccessToken, onToast]);
+  }, [newWorkosSessionToken, getClientAccessToken, onToast]);
 
   const handleAutoLogin = useCallback(async () => {
     if (!newEmail || !newPassword) {
@@ -309,17 +324,8 @@ export const AddAccountForm = memo(({ isOpen, onSuccess, onCancel, onToast }: Ad
         if (showMachineIds && REQUIRED_MACHINE_ID_KEYS.every((k) => parsedMachineIds[k])) {
           await AccountService.editAccount(newEmail, undefined, undefined, undefined, undefined, undefined, undefined, parsedMachineIds);
         }
-        onToast("账户添加成功", "success");
-        setNewEmail("");
-        setNewToken("");
-        setNewPassword("");
-        setNewRefreshToken("");
-        setNewWorkosSessionToken("");
-        setNewTags([]);
-        setShowMachineIds(false);
-        setMachineIdsJson("");
-        setParsedMachineIds({});
-        onSuccess();
+        onToast(result.message || "账户添加成功", "success");
+        onSuccess(); // 关闭弹窗后 useEffect 会自动重置表单
       } else {
         onToast(result.message, "error");
       }

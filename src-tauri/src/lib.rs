@@ -706,32 +706,16 @@ async fn add_account(
     workos_cursor_session_token: Option<String>,
     tags: Option<Vec<String>>,
 ) -> Result<serde_json::Value, String> {
-    match AccountManager::add_account(
-        email.clone(),
-        token,
-        refresh_token,
-        workos_cursor_session_token,
-        tags,
-    ) {
-        Ok(()) => Ok(serde_json::json!({
-            "success": true,
-            "message": format!("账户 {} 添加成功", email)
-        })),
-        Err(e) => {
-            let error_msg = e.to_string();
-            // 账号已存在时仍返回 success: true
-            if error_msg.contains("Account with this email already exists") {
-                Ok(serde_json::json!({
-                    "success": true,
-                    "message": format!("添加账户失败: {}", error_msg)
-                }))
+    match AccountManager::add_account(email.clone(), token, refresh_token, workos_cursor_session_token, tags) {
+        Ok(updated) => {
+            let msg = if updated {
+                format!("账户 {} 已更新", email)
             } else {
-                Ok(serde_json::json!({
-                    "success": false,
-                    "message": format!("添加账户失败: {}", error_msg)
-                }))
-            }
+                format!("账户 {} 添加成功", email)
+            };
+            Ok(serde_json::json!({ "success": true, "message": msg, "updated": updated }))
         }
+        Err(e) => Ok(serde_json::json!({ "success": false, "message": format!("添加账户失败: {}", e) })),
     }
 }
 

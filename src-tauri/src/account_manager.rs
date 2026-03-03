@@ -408,25 +408,36 @@ impl AccountManager {
         None
     }
 
-    /// 添加新账户（支持传入初始标签）
+    /// 添加或更新账户（upsert）：邮箱已存在时覆盖 token 等认证信息，保留机器码和标签
     pub fn add_account(
         email: String,
         token: String,
         refresh_token: Option<String>,
         workos_cursor_session_token: Option<String>,
         tags: Option<Vec<String>>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let mut accounts = Self::load_accounts()?;
 
-        // 检查账号是否已存在
-        if accounts.iter().any(|acc| acc.email == email) {
-            return Err(anyhow!("Account with this email already exists"));
-        }
-
-        // 自动绑定当前机器码
         let current_ids = MachineIdRestorer::new()
             .ok()
             .and_then(|r| r.get_current_machine_ids().ok().flatten());
+
+        if let Some(existing) = accounts.iter_mut().find(|acc| acc.email == email) {
+            // 邮箱已存在：覆盖认证信息，保留原有机器码和标签
+            existing.token = token;
+            existing.refresh_token = refresh_token;
+            existing.workos_cursor_session_token = workos_cursor_session_token;
+            if let Some(t) = tags {
+                if !t.is_empty() {
+                    existing.tags = t;
+                }
+            }
+            if existing.machine_ids.is_none() {
+                existing.machine_ids = current_ids;
+            }
+            Self::save_accounts(&accounts)?;
+            return Ok(true); // true = 已更新
+        }
 
         let new_account = AccountInfo {
             email,
@@ -449,8 +460,7 @@ impl AccountManager {
 
         accounts.push(new_account);
         Self::save_accounts(&accounts)?;
-
-        Ok(())
+        Ok(false) // false = 新增
     }
 
     /// Get all accounts with current account info
