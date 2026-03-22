@@ -16,10 +16,10 @@ pub async fn open_cancel_subscription_page(
     let url = stripe_url.unwrap_or_else(|| "https://www.cursor.com/settings".to_string());
     let cookie = crate::infra::api::CursorApiClient::build_workos_cookie(&session_token);
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "cancel_subscription",
-        tauri::WebviewUrl::External(url.parse().map_err(|e: url::ParseError| e.to_string())?),
+        tauri::WebviewUrl::External(url.parse().map_err(|e| format!("URL 解析失败: {}", e))?),
     )
     .title("Cursor 订阅管理")
     .inner_size(1200.0, 800.0)
@@ -61,10 +61,10 @@ pub async fn open_bind_card_info(
 ) -> Result<serde_json::Value, String> {
     let url = stripe_url.unwrap_or_else(|| "https://www.cursor.com/settings".to_string());
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "bind_card",
-        tauri::WebviewUrl::External(url.parse().map_err(|e: url::ParseError| e.to_string())?),
+        tauri::WebviewUrl::External(url.parse().map_err(|e| format!("URL 解析失败: {}", e))?),
     )
     .title("绑卡信息")
     .inner_size(1200.0, 800.0)
@@ -275,7 +275,7 @@ pub async fn trigger_authorization_login_poll(
 pub async fn open_login_for_session_token(
     app: tauri::AppHandle,
 ) -> Result<serde_json::Value, String> {
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "login_session",
         tauri::WebviewUrl::External("https://authenticator.cursor.sh/".parse().unwrap()),
@@ -299,10 +299,10 @@ pub async fn auto_login_and_get_cookie(
 ) -> Result<serde_json::Value, String> {
     let url = target_url.unwrap_or_else(|| "https://www.cursor.com/settings".to_string());
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "auto_login",
-        tauri::WebviewUrl::External(url.parse().map_err(|e: url::ParseError| e.to_string())?),
+        tauri::WebviewUrl::External(url.parse().map_err(|e| format!("URL 解析失败: {}", e))?),
     )
     .title("Cursor")
     .inner_size(1200.0, 800.0)
@@ -324,10 +324,10 @@ pub async fn verification_code_login(
 ) -> Result<serde_json::Value, String> {
     let url = format!("https://authenticator.cursor.sh/sign-in?email={}", email);
 
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "verification_login",
-        tauri::WebviewUrl::External(url.parse().map_err(|e: url::ParseError| e.to_string())?),
+        tauri::WebviewUrl::External(url.parse().map_err(|e| format!("URL 解析失败: {}", e))?),
     )
     .title("验证码登录")
     .inner_size(800.0, 700.0)
@@ -397,7 +397,7 @@ pub async fn open_cursor_dashboard(
     app: tauri::AppHandle,
     session_token: String,
 ) -> Result<serde_json::Value, String> {
-    let window = tauri::WebviewWindowBuilder::new(
+    let _window = tauri::WebviewWindowBuilder::new(
         &app,
         "cursor_dashboard",
         tauri::WebviewUrl::External("https://www.cursor.com/settings".parse().unwrap()),
