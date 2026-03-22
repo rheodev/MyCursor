@@ -11,7 +11,7 @@ export function useAggregatedUsage(
   return useQuery({
     queryKey: ["usage", "aggregated", sessionToken, startDate, endDate],
     queryFn: () =>
-      invoke("get_usage_for_period", { sessionToken, startDate, endDate }),
+      invoke("get_usage_for_period", { token: sessionToken, startDate, endDate, teamId: 0 }),
     enabled: !!sessionToken,
     staleTime: 5 * 60_000,
   });
@@ -26,7 +26,7 @@ export function useUserAnalytics(
   return useQuery({
     queryKey: ["usage", "analytics", sessionToken, startDate, endDate],
     queryFn: () =>
-      invoke("get_user_analytics", { sessionToken, startDate, endDate }),
+      invoke("get_user_analytics", { token: sessionToken, teamId: 0, userId: 0, startDate, endDate }),
     enabled: !!sessionToken,
   });
 }

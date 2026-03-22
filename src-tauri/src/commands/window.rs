@@ -56,10 +56,10 @@ pub async fn cancel_subscription_failed(app: tauri::AppHandle) -> Result<(), Str
 #[specta::specta]
 pub async fn open_bind_card_info(
     app: tauri::AppHandle,
-    session_token: String,
-    stripe_url: Option<String>,
+    access_token: String,
+    workos_cursor_session_token: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let url = stripe_url.unwrap_or_else(|| "https://www.cursor.com/settings".to_string());
+    let url = "https://www.cursor.com/settings".to_string();
 
     let _window = tauri::WebviewWindowBuilder::new(
         &app,
@@ -395,7 +395,7 @@ pub async fn show_auto_login_window(app: tauri::AppHandle) -> Result<(), String>
 #[specta::specta]
 pub async fn open_cursor_dashboard(
     app: tauri::AppHandle,
-    session_token: String,
+    workos_cursor_session_token: String,
 ) -> Result<serde_json::Value, String> {
     let _window = tauri::WebviewWindowBuilder::new(
         &app,

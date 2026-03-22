@@ -135,40 +135,32 @@ pub async fn add_account(
 #[specta::specta]
 pub async fn edit_account(
     service: State<'_, AccountService>,
-    original_email: String,
     email: String,
-    token: String,
-    refresh_token: Option<String>,
-    workos_cursor_session_token: Option<String>,
-    username: Option<String>,
-    tags: Option<Vec<String>>,
-    machine_ids_json: Option<String>,
+    new_email: Option<String>,
+    new_token: Option<String>,
+    new_refresh_token: Option<String>,
+    new_workos_cursor_session_token: Option<String>,
+    new_username: Option<String>,
+    new_tags: Option<Vec<String>>,
+    new_machine_ids: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    let machine_ids = machine_ids_json
-        .and_then(|json| serde_json::from_str(&json).ok());
+    let mut accounts = service.store().load_all().map_err(|e| e.to_string())?;
 
-    let updated = AccountInfo {
-        email,
-        token,
-        refresh_token,
-        workos_cursor_session_token,
-        is_current: false,
-        created_at: String::new(),
-        username,
-        tags: tags.unwrap_or_default(),
-        machine_ids,
-        subscription_type: None,
-        subscription_status: None,
-        trial_days_remaining: None,
-        name: None,
-        sub: None,
-        picture: None,
-        user_id: None,
-    };
-
-    service.edit(&original_email, updated)
-        .map(|_| serde_json::json!({"success": true, "message": "账号编辑成功"}))
-        .map_err(|e| e.to_string())
+    if let Some(acc) = accounts.iter_mut().find(|a| a.email == email) {
+        if let Some(ne) = new_email { acc.email = ne; }
+        if let Some(nt) = new_token { acc.token = nt; }
+        if let Some(nr) = new_refresh_token { acc.refresh_token = Some(nr); }
+        if let Some(nw) = new_workos_cursor_session_token { acc.workos_cursor_session_token = Some(nw); }
+        if let Some(nu) = new_username { acc.username = Some(nu); }
+        if let Some(nt) = new_tags { acc.tags = nt; }
+        if let Some(nm) = new_machine_ids {
+            acc.machine_ids = serde_json::from_value(nm).ok();
+        }
+        service.store().save_all(&accounts).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({"success": true, "message": "账号编辑成功"}))
+    } else {
+        Ok(serde_json::json!({"success": false, "message": format!("账号 {} 不存在", email)}))
+    }
 }
 
 /// 带选项切换账号
@@ -196,7 +188,7 @@ pub async fn switch_account_with_token(
     service: State<'_, AccountService>,
     email: String,
     token: String,
-    refresh_token: Option<String>,
+    auth_type: Option<String>,
 ) -> Result<SwitchAccountResult, String> {
     let cursor = service.cursor();
     let clean_token = crate::infra::api::checksum::TokenParser::extract_token_part(&token);

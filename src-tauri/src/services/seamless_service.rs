@@ -45,8 +45,23 @@ impl SeamlessService {
 
     /// 查询无缝切号状态
     pub fn get_status(&self) -> Result<SeamlessStatus, AppError> {
-        let injected = self.cursor.workbench().is_injected().unwrap_or(false);
-        let backup_exists = self.cursor.workbench().backup_exists().unwrap_or(false);
+        let (injected, backup_exists) = match self.cursor.workbench().workbench_js_path() {
+            Ok(wp) => {
+                let injected = if wp.exists() {
+                    std::fs::read_to_string(wp)
+                        .map(|c| c.contains("__MYCURSOR_SEAMLESS__"))
+                        .unwrap_or(false)
+                } else {
+                    false
+                };
+                let backup = self.cursor.workbench().backup_exists().unwrap_or(false);
+                (injected, backup)
+            }
+            Err(_) => {
+                // workbench 路径未找到，尝试使用自定义路径或配置查找
+                (false, false)
+            }
+        };
 
         Ok(SeamlessStatus {
             injected,

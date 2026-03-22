@@ -24,6 +24,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Update version in config files
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Update package.json
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
+          # Update Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          # Update tauri.conf.json
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+          # Clean up backup files
+          rm -f package.json.bak src-tauri/Cargo.toml.bak src-tauri/tauri.conf.json.bak
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -61,6 +82,38 @@ jobs:
       - name: Build
         run: npm run tauri:build
 
+      - name: Rename artifacts (remove version from filenames)
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # macOS: rename dmg
+          if [ -d "src-tauri/target/release/bundle/dmg" ]; then
+            for f in src-tauri/target/release/bundle/dmg/*.dmg; do
+              if [ -f "$f" ]; then
+                mv "$f" "src-tauri/target/release/bundle/dmg/MyCursor.dmg"
+              fi
+            done
+          fi
+
+          # Linux: rename AppImage
+          if [ -d "src-tauri/target/release/bundle/appimage" ]; then
+            for f in src-tauri/target/release/bundle/appimage/*.AppImage; do
+              if [ -f "$f" ]; then
+                mv "$f" "src-tauri/target/release/bundle/appimage/MyCursor.AppImage"
+              fi
+            done
+          fi
+
+          # Linux: rename deb
+          if [ -d "src-tauri/target/release/bundle/deb" ]; then
+            for f in src-tauri/target/release/bundle/deb/*.deb; do
+              if [ -f "$f" ]; then
+                mv "$f" "src-tauri/target/release/bundle/deb/MyCursor.deb"
+              fi
+            done
+          fi
+
       - name: Upload Release - Windows
         if: matrix.platform.os == 'windows-latest'
         uses: softprops/action-gh-release@v2
@@ -72,19 +125,19 @@ jobs:
             | 平台 | 文件 | 说明 |
             |------|------|------|
             | Windows | `MyCursor.exe` | 免安装，双击运行 |
-            | macOS | `.dmg` | 拖入 Applications |
-            | Linux | `.AppImage` / `.deb` | AppImage 免安装 |
+            | macOS | `MyCursor.dmg` | 拖入 Applications |
+            | Linux | `MyCursor.AppImage` / `MyCursor.deb` | AppImage 免安装 |
 
       - name: Upload Release - macOS
         if: matrix.platform.os == 'macos-latest'
         uses: softprops/action-gh-release@v2
         with:
-          files: src-tauri/target/release/bundle/dmg/*.dmg
+          files: src-tauri/target/release/bundle/dmg/MyCursor.dmg
 
       - name: Upload Release - Linux
         if: matrix.platform.os == 'ubuntu-22.04'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/MyCursor.deb
+            src-tauri/target/release/bundle/appimage/MyCursor.AppImage
