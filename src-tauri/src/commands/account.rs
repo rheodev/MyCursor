@@ -204,36 +204,15 @@ pub async fn switch_account_with_token(
     })
 }
 
-/// 刷新单个账号信息（通过 Token 查询订阅状态）
+/// 刷新单个账号信息（通过 Token 查询授权 + 订阅状态）
+///
+/// 返回完整的 AuthCheckResult，与前端 configService.refreshSingleAccountInfo 对接。
 #[tauri::command]
 #[specta::specta]
 pub async fn refresh_single_account_info(token: String) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
-    let clean_token = crate::infra::api::checksum::TokenParser::extract_token_part(&token);
-
-    let resp = client
-        .get("https://api2.cursor.sh/auth/full_stripe_profile")
-        .header("Authorization", format!("Bearer {}", clean_token))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let status = resp.status().as_u16();
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-
-    if status == 200 {
-        let data: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::json!(null));
-        Ok(serde_json::json!({
-            "success": true,
-            "data": data,
-            "status": status
-        }))
-    } else {
-        Ok(serde_json::json!({
-            "success": false,
-            "status": status,
-            "message": text
-        }))
+    match crate::commands::system::check_user_authorization(token).await {
+        Ok(result) => Ok(serde_json::json!(result)),
+        Err(e) => Err(format!("获取账户信息失败: {}", e)),
     }
 }
 
@@ -241,32 +220,25 @@ pub async fn refresh_single_account_info(token: String) -> Result<serde_json::Va
 #[tauri::command]
 #[specta::specta]
 pub async fn refresh_all_accounts_info(tokens: Vec<String>) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
     let mut results = Vec::new();
 
     for token in &tokens {
-        let clean = crate::infra::api::checksum::TokenParser::extract_token_part(token);
-
-        let result = match client
-            .get("https://api2.cursor.sh/auth/full_stripe_profile")
-            .header("Authorization", format!("Bearer {}", clean))
-            .send()
-            .await
-        {
-            Ok(resp) => {
-                let status = resp.status().as_u16();
-                let text = resp.text().await.unwrap_or_default();
-                if status == 200 {
-                    let data: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::json!(null));
-                    serde_json::json!({"success": true, "data": data, "status": status})
-                } else {
-                    serde_json::json!({"success": false, "status": status})
-                }
+        match crate::commands::system::check_user_authorization(token.clone()).await {
+            Ok(result) => {
+                results.push(serde_json::json!({
+                    "token": token,
+                    "success": result.success,
+                    "user_info": result.user_info
+                }));
             }
-            Err(e) => serde_json::json!({"success": false, "error": e.to_string()}),
-        };
-
-        results.push(result);
+            Err(e) => {
+                results.push(serde_json::json!({
+                    "token": token,
+                    "success": false,
+                    "error": e.to_string()
+                }));
+            }
+        }
     }
 
     Ok(serde_json::json!({

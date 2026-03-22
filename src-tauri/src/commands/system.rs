@@ -191,10 +191,33 @@ pub async fn check_user_authorization(token: String) -> Result<crate::domain::au
     if status == 200 {
         let data: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::json!(null));
 
-        let subscription_type = data.get("membershipType")
-            .or(data.get("subscription"))
+        // 从 Stripe profile 响应中解析订阅信息
+        // 响应结构: { customer: { email }, subscription: { membershipType, status }, trialDaysRemaining }
+        let customer_email = data.get("customer")
+            .and_then(|c| c.get("email"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+
+        let subscription = data.get("subscription");
+        let subscription_type = subscription
+            .and_then(|s| s.get("membershipType"))
+            .or(data.get("membershipType"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let subscription_status = subscription
+            .and_then(|s| s.get("status"))
+            .or(data.get("subscriptionStatus"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let trial_days = data.get("trialDaysRemaining")
+            .and_then(|v| v.as_i64())
+            .map(|v| v as i32);
+
+        let email = customer_email.or_else(|| {
+            data.get("email").and_then(|v| v.as_str()).map(|s| s.to_string())
+        });
 
         let user_info = crate::domain::auth::UserAuthInfo {
             is_authorized: true,
@@ -204,11 +227,11 @@ pub async fn check_user_authorization(token: String) -> Result<crate::domain::au
             error_message: None,
             checksum: None,
             account_info: Some(crate::domain::auth::AuthAccountInfo {
-                email: data.get("email").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                email,
                 username: data.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()),
                 subscription_type,
-                subscription_status: data.get("subscriptionStatus").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                trial_days_remaining: data.get("trialDaysRemaining").and_then(|v| v.as_i64()).map(|v| v as i32),
+                subscription_status,
+                trial_days_remaining: trial_days,
                 usage_info: None,
                 aggregated_usage: None,
             }),
