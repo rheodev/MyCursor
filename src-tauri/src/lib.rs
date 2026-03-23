@@ -129,8 +129,12 @@ pub fn run() {
 
             let app_handle = app.handle().clone();
             let app_handle_menu = app.handle().clone();
+            let tray_icon = app.default_window_icon().cloned()
+                .expect("应用图标未配置");
             let _tray = TrayIconBuilder::new()
                 .tooltip("MyCursor")
+                .icon(tray_icon)
+                .icon_as_template(true)
                 .menu(&tray_menu)
                 .on_menu_event(move |_app, event| {
                     match event.id().as_ref() {
