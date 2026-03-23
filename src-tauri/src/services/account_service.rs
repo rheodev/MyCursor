@@ -148,58 +148,82 @@ impl AccountService {
 
     // === 导入导出 ===
 
-    /// 导出账号到指定路径
-    pub fn export(&self, export_path: &str, selected_emails: Option<Vec<String>>) -> Result<serde_json::Value, AppError> {
+    /// 导出账号到指定目录
+    ///
+    /// 自动生成文件名：单个账号用邮箱命名，多个用批量+时间戳命名。
+    pub fn export(&self, export_dir: &str, selected_emails: Option<Vec<String>>) -> Result<serde_json::Value, AppError> {
         let accounts = self.store.load_all()?;
 
-        let to_export = if let Some(ref emails) = selected_emails {
-            accounts.into_iter().filter(|a| emails.contains(&a.email)).collect::<Vec<_>>()
+        let to_export: Vec<_> = if let Some(ref emails) = selected_emails {
+            if emails.is_empty() {
+                accounts
+            } else {
+                accounts.into_iter().filter(|a| emails.contains(&a.email)).collect()
+            }
         } else {
             accounts
         };
 
-        let content = serde_json::to_string_pretty(&to_export)?;
-        std::fs::write(export_path, &content)?;
+        if to_export.is_empty() {
+            return Ok(serde_json::json!({
+                "success": false,
+                "message": "没有可导出的账号"
+            }));
+        }
 
-        log_info!("导出 {} 个账号到 {}", to_export.len(), export_path);
+        let filename = if to_export.len() == 1 {
+            let sanitized = to_export[0].email.replace(['@', '.', '/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+            format!("{}_cursor_accounts.json", sanitized)
+        } else {
+            let now = chrono::Local::now().format("%Y%m%d_%H%M%S");
+            format!("cursor_accounts_batch_{}.json", now)
+        };
+
+        let file_path = std::path::PathBuf::from(export_dir).join(&filename);
+        let content = serde_json::to_string_pretty(&to_export)?;
+        std::fs::write(&file_path, &content)?;
+
+        let path_str = file_path.to_string_lossy().to_string();
+        log_info!("导出 {} 个账号到 {}", to_export.len(), path_str);
 
         Ok(serde_json::json!({
             "success": true,
             "message": format!("成功导出 {} 个账号", to_export.len()),
-            "count": to_export.len()
+            "count": to_export.len(),
+            "exported_path": path_str
         }))
     }
 
-    /// 从文件导入账号
+    /// 从文件导入账号（已存在的账号用导入数据覆盖）
     pub fn import(&self, import_path: &str) -> Result<serde_json::Value, AppError> {
         let content = std::fs::read_to_string(import_path)?;
         let imported: Vec<AccountInfo> = serde_json::from_str(&content)?;
         let import_count = imported.len();
 
         let mut accounts = self.store.load_all()?;
-        let existing_emails: std::collections::HashSet<_> = accounts.iter().map(|a| a.email.clone()).collect();
 
         let mut added = 0;
-        let mut skipped = 0;
+        let mut updated = 0;
 
-        for acc in imported {
-            if existing_emails.contains(&acc.email) {
-                skipped += 1;
+        for new_acc in imported {
+            if let Some(existing) = accounts.iter_mut().find(|a| a.email == new_acc.email) {
+                *existing = new_acc;
+                updated += 1;
             } else {
-                accounts.push(acc);
+                accounts.push(new_acc);
                 added += 1;
             }
         }
 
         self.store.save_all(&accounts)?;
 
-        log_info!("导入完成: 添加 {}, 跳过 {}, 共 {}", added, skipped, import_count);
+        log_info!("导入完成: 新增 {}, 更新 {}, 共 {}", added, updated, import_count);
 
         Ok(serde_json::json!({
             "success": true,
-            "message": format!("导入完成: 添加 {} 个, 跳过 {} 个重复", added, skipped),
+            "message": format!("导入完成: 新增 {} 个, 更新 {} 个已存在", added, updated),
             "added": added,
-            "skipped": skipped,
+            "updated": updated,
             "total": import_count
         }))
     }
