@@ -505,10 +505,9 @@ export const AccountManagePage: React.FC = () => {
   }, [filteredAccounts.length]);
 
   const isAllSelected = useMemo(() => {
-    return accountData?.accounts && 
-           selectedAccounts.size === accountData.accounts.length && 
-           accountData.accounts.length > 0;
-  }, [accountData, selectedAccounts.size]);
+    return filteredAccounts.length > 0 &&
+           filteredAccounts.every((acc) => selectedAccounts.has(acc.email));
+  }, [filteredAccounts, selectedAccounts]);
 
   // 渲染账号卡片的函数（用于虚拟滚动）
   const renderAccountCard = useCallback((account: AccountInfo, index: number) => {
@@ -859,7 +858,7 @@ export const AccountManagePage: React.FC = () => {
             </div>
             {accountData?.accounts && accountData.accounts.length > 0 && (
               <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                {subscriptionFilter === "all" 
+                {subscriptionFilter === "all" && tagFilter === "all"
                   ? `共 ${accountData.accounts.length} 个账户`
                   : `显示 ${filteredAccounts.length} / ${accountData.accounts.length} 个账户`
                 }
