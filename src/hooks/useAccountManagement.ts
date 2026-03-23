@@ -125,7 +125,7 @@ export const useAccountManagement = () => {
   }, []);
 
   // 刷新单个账户（获取订阅信息 + auth/me 用户信息）
-  const refreshSingleAccount = useCallback(async (account: AccountInfo, index: number) => {
+  const refreshSingleAccount = useCallback(async (account: AccountInfo, _index: number) => {
     performanceMonitor.start(`refreshAccount-${account.email}`);
 
     try {
