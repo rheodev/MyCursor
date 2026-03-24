@@ -106,15 +106,29 @@ impl AccountService {
     // === 切换 ===
 
     /// 切换账号（注入 token/email 到 Cursor 存储）
+    ///
+    /// 切换流程：关闭 Cursor → 注入 storage.json → 注入 SQLite → 等待写入完成
     pub fn switch(&self, email: &str) -> Result<SwitchAccountResult, AppError> {
         let accounts = self.store.load_all()?;
         let account = accounts.iter().find(|a| a.email == email)
             .ok_or_else(|| AppError::AccountNotFound(email.to_string()))?;
 
         let mut details = Vec::new();
+        let token = Self::extract_token_part(&account.token);
+
+        // 关闭 Cursor 进程（SQLite 被占用时写入无效）
+        let process = self.cursor.process();
+        if process.is_running() {
+            if process.force_close() {
+                details.push("已关闭 Cursor 进程".to_string());
+            } else {
+                details.push("警告: Cursor 关闭失败，切换可能不生效".to_string());
+            }
+        } else {
+            details.push("Cursor 未运行".to_string());
+        }
 
         // 注入认证信息到 storage.json
-        let token = Self::extract_token_part(&account.token);
         match self.cursor.storage().write_auth(&account.email, &token) {
             Ok(_) => details.push("已更新 storage.json 认证信息".to_string()),
             Err(e) => details.push(format!("更新 storage.json 失败: {}", e)),
@@ -129,6 +143,9 @@ impl AccountService {
             Ok(_) => details.push("已注入 Token 到 SQLite".to_string()),
             Err(e) => details.push(format!("注入 Token 失败: {}", e)),
         }
+
+        // 等待数据库写入完成
+        std::thread::sleep(std::time::Duration::from_millis(500));
 
         // 更新 is_current 标记
         let mut all_accounts = self.store.load_all()?;

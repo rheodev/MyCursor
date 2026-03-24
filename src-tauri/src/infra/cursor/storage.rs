@@ -85,13 +85,17 @@ impl<'a> StorageJson<'a> {
             .map(|s| s.to_string()))
     }
 
-    /// 写入认证信息（邮箱 + Token）
+    /// 写入认证信息（邮箱 + Token + 全部关联字段）
     pub fn write_auth(&self, email: &str, token: &str) -> Result<(), AppError> {
         let mut data = self.read_all().unwrap_or_else(|_| serde_json::json!({}));
 
         if let Some(obj) = data.as_object_mut() {
             obj.insert("cursorAuth/cachedEmail".to_string(), serde_json::json!(email));
             obj.insert("cursorAuth/accessToken".to_string(), serde_json::json!(token));
+            obj.insert("cursorAuth/refreshToken".to_string(), serde_json::json!(token));
+            obj.insert("cursorAuth/cachedSignUpType".to_string(), serde_json::json!("Auth_0"));
+            obj.insert("cursor.email".to_string(), serde_json::json!(email));
+            obj.insert("cursor.accessToken".to_string(), serde_json::json!(token));
         }
 
         self.write_all(&data)

@@ -13,14 +13,20 @@ impl<'a> CursorSqlite<'a> {
         Self { path }
     }
 
-    /// 注入邮箱到 SQLite
+    /// 注入邮箱到 SQLite（含兼容字段）
     pub fn inject_email(&self, email: &str) -> Result<(), AppError> {
-        self.upsert("cursorAuth/cachedEmail", email)
+        self.upsert("cursorAuth/cachedEmail", email)?;
+        self.upsert("cursor.email", email)?;
+        Ok(())
     }
 
-    /// 注入 Token 到 SQLite（默认 Auth_0 类型）
+    /// 注入 Token 到 SQLite（含 refreshToken、cachedSignUpType 等完整认证字段）
     pub fn inject_token(&self, token: &str) -> Result<(), AppError> {
-        self.upsert("cursorAuth/accessToken", token)
+        self.upsert("cursorAuth/accessToken", token)?;
+        self.upsert("cursorAuth/refreshToken", token)?;
+        self.upsert("cursor.accessToken", token)?;
+        self.upsert("cursorAuth/cachedSignUpType", "Auth_0")?;
+        Ok(())
     }
 
     /// 注入 Token 并指定认证类型

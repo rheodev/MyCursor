@@ -12,18 +12,22 @@ impl PlatformOps for WindowsOps {
 
         let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
 
+        // MachineGuid：优先使用绑定的 machine_guid（系统级），回退到 machine_id
+        let guid_value = ids.machine_guid.as_deref().unwrap_or(&ids.machine_id);
         if let Ok(key) = hklm.open_subkey_with_flags(
             "SOFTWARE\\Microsoft\\Cryptography",
             KEY_SET_VALUE,
         ) {
-            let _ = key.set_value("MachineGuid", &ids.machine_id);
+            let _ = key.set_value("MachineGuid", &guid_value);
         }
 
+        // SQMClient MachineId：优先使用绑定的 sqm_client_id（系统级），回退到 sqm_id
+        let sqm_value = ids.sqm_client_id.as_deref().unwrap_or(&ids.sqm_id);
         if let Ok(key) = hklm.open_subkey_with_flags(
             "SOFTWARE\\Microsoft\\SQMClient",
             KEY_SET_VALUE,
         ) {
-            let _ = key.set_value("MachineId", &ids.sqm_id);
+            let _ = key.set_value("MachineId", &sqm_value);
         }
 
         Ok(())

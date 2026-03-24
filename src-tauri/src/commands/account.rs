@@ -170,6 +170,8 @@ pub async fn edit_account(
 /// - use_bound_machine_id=true：恢复账号绑定的机器码到所有存储位置
 /// - reset_machine_id=true：生成新机器码并写入所有存储位置，同时更新账号绑定
 /// - 都为 false：保持当前机器码不变
+///
+/// 执行顺序：关闭 Cursor → 写入机器码 → 注入认证信息
 #[tauri::command]
 #[specta::specta]
 pub async fn switch_account_with_options(
@@ -179,6 +181,12 @@ pub async fn switch_account_with_options(
     use_bound_machine_id: bool,
 ) -> Result<SwitchAccountResult, String> {
     let cursor = service.cursor();
+
+    // 先关闭 Cursor（避免 SQLite 锁定、storage.json 被回写覆盖）
+    let process = cursor.process();
+    if process.is_running() {
+        process.force_close();
+    }
 
     if use_bound_machine_id {
         let accounts = service.store().load_all().map_err(|e| e.to_string())?;
@@ -197,7 +205,7 @@ pub async fn switch_account_with_options(
         let platform = crate::infra::platform::create();
         let _ = platform.update_system_ids(&new_ids);
 
-        // 将新生成的机器码保存到该账号的绑定数据
+        // 将新生成的机器码保存到该账号的绑定数据（含系统注册表值）
         let mut accounts = service.store().load_all().map_err(|e| e.to_string())?;
         if let Some(acc) = accounts.iter_mut().find(|a| a.email == email) {
             let mut bound_ids = new_ids;
@@ -209,6 +217,7 @@ pub async fn switch_account_with_options(
         }
     }
 
+    // switch 内部会再次检测 Cursor 进程，已关闭则自动跳过
     service.switch(&email).map_err(|e| e.to_string())
 }
 
