@@ -3,6 +3,7 @@
 /// 使用新架构 services::AccountService 处理业务逻辑。
 use crate::domain::account::*;
 use crate::services::account_service::AccountService;
+use crate::services::identity_service::IdentityService;
 use crate::{log_info, log_error};
 use tauri::State;
 
@@ -180,6 +181,7 @@ pub async fn edit_account(
 #[specta::specta]
 pub async fn switch_account_with_options(
     service: State<'_, AccountService>,
+    identity_service: State<'_, IdentityService>,
     email: String,
     reset_machine_id: bool,
     use_bound_machine_id: bool,
@@ -196,27 +198,18 @@ pub async fn switch_account_with_options(
         let accounts = service.store().load_all().map_err(|e| e.to_string())?;
         if let Some(account) = accounts.iter().find(|a| a.email == email) {
             if let Some(ref ids) = account.machine_ids {
-                let _ = cursor.storage().write_machine_ids(ids);
-                let _ = cursor.sqlite().update_service_machine_id(&ids.service_machine_id);
-                let platform = crate::infra::platform::create();
-                let _ = platform.update_system_ids(ids);
+                identity_service.apply_ids(ids).map_err(|e| e.to_string())?;
             }
         }
     } else if reset_machine_id {
-        let new_ids = crate::domain::identity::MachineIds::generate();
-        let _ = cursor.storage().write_machine_ids(&new_ids);
-        let _ = cursor.sqlite().update_service_machine_id(&new_ids.service_machine_id);
-        let platform = crate::infra::platform::create();
-        let _ = platform.update_system_ids(&new_ids);
+        let new_ids = identity_service.generate_new_ids();
+        identity_service.apply_ids(&new_ids).map_err(|e| e.to_string())?;
 
-        // 将新生成的机器码保存到该账号的绑定数据（含系统注册表值）
+        // 将新生成并实际写入后的机器码保存到该账号的绑定数据
         let mut accounts = service.store().load_all().map_err(|e| e.to_string())?;
         if let Some(acc) = accounts.iter_mut().find(|a| a.email == email) {
-            let mut bound_ids = new_ids;
-            let (guid, sqm) = crate::infra::platform::read_registry_ids();
-            bound_ids.machine_guid = guid;
-            bound_ids.sqm_client_id = sqm;
-            acc.machine_ids = Some(bound_ids);
+            let applied_ids = cursor.read_full_machine_ids().unwrap_or(new_ids);
+            acc.machine_ids = Some(applied_ids);
             let _ = service.store().save_all(&accounts);
         }
     }

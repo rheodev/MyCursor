@@ -48,6 +48,16 @@ impl MachineIds {
     }
 }
 
+/// 结构化 Machine ID 备份文件
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineIdBackupFile {
+    pub version: u32,
+    pub backup_type: String,
+    pub created_at: String,
+    pub reason: String,
+    pub machine_ids: MachineIds,
+}
+
 /// 备份文件信息
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct BackupInfo {

@@ -10,7 +10,7 @@ use crate::{log_info, log_error, log_debug};
 use rand::Rng;
 use sha2::{Digest, Sha256, Sha512};
 use uuid::Uuid;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Machine ID 管理服务
 pub struct IdentityService {
@@ -45,42 +45,45 @@ impl IdentityService {
 
     // === 备份 ===
 
-    /// 创建备份
-    pub fn create_backup(&self) -> Result<String, AppError> {
-        let path = &self.cursor.paths.storage_json;
-        if !path.exists() {
-            return Err(AppError::Io("storage.json 文件不存在".to_string()));
-        }
+    /// 获取统一备份存储
+    fn backup_store(&self) -> Result<BackupStore, AppError> {
+        let data_dir = crate::get_data_dir().map_err(AppError::from)?;
+        Ok(BackupStore::new(&data_dir))
+    }
 
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-        let backup_path = format!("{}.bak.{}", path.to_string_lossy(), timestamp);
-        std::fs::copy(path, &backup_path)?;
-        log_info!("创建备份: {}", backup_path);
+    /// 读取当前完整 Machine ID（含系统级字段）
+    fn read_current_full_ids(&self) -> Result<MachineIds, AppError> {
+        self.cursor.read_full_machine_ids()
+    }
+
+    /// 创建结构化备份到 cursor_data/backup
+    pub fn create_backup(&self, reason: &str) -> Result<String, AppError> {
+        let ids = self.read_current_full_ids()?;
+        let backup = MachineIdBackupFile {
+            version: 1,
+            backup_type: "machine_ids".to_string(),
+            created_at: chrono::Local::now().to_rfc3339(),
+            reason: reason.to_string(),
+            machine_ids: ids,
+        };
+
+        let store = self.backup_store()?;
+        let backup_path = store.save_backup(&backup, reason)?;
+        log_info!("创建结构化备份: {}", backup_path);
         Ok(backup_path)
     }
 
     /// 获取所有备份列表
     pub fn list_backups(&self) -> Result<Vec<BackupInfo>, AppError> {
-        let store = BackupStore::new(&self.cursor.paths.storage_json);
+        let store = self.backup_store()?;
         store.find_backups()
     }
 
     /// 从备份提取 Machine ID
     pub fn extract_ids_from_backup(&self, backup_path: &str) -> Result<MachineIds, AppError> {
-        let content = std::fs::read_to_string(backup_path)?;
-        let data: serde_json::Value = serde_json::from_str(&content)?;
-
-        Ok(MachineIds {
-            dev_device_id: data["telemetry.devDeviceId"].as_str().unwrap_or("").to_string(),
-            mac_machine_id: data["telemetry.macMachineId"].as_str().unwrap_or("").to_string(),
-            machine_id: data["telemetry.machineId"].as_str().unwrap_or("").to_string(),
-            sqm_id: data["telemetry.sqmId"].as_str().unwrap_or("").to_string(),
-            service_machine_id: data["storage.serviceMachineId"].as_str()
-                .unwrap_or(data["telemetry.devDeviceId"].as_str().unwrap_or(""))
-                .to_string(),
-            machine_guid: None,
-            sqm_client_id: None,
-        })
+        let store = self.backup_store()?;
+        let backup = store.load_backup(backup_path)?;
+        Ok(backup.machine_ids)
     }
 
     // === 重置 ===
@@ -147,7 +150,7 @@ impl IdentityService {
         Ok(details)
     }
 
-    /// 重置 Machine ID（先备份，再生成新 ID 写入所有位置）
+    /// 重置 Machine ID（先结构化备份，再生成新 ID 写入所有位置）
     pub fn reset(&self) -> Result<ResetResult, AppError> {
         log_info!("开始机器ID重置流程...");
         let mut details = Vec::new();
@@ -161,17 +164,14 @@ impl IdentityService {
             });
         }
 
-        // 创建备份
-        match self.create_backup() {
+        match self.create_backup("reset_machine_ids") {
             Ok(path) => details.push(format!("已创建备份: {}", path)),
             Err(e) => details.push(format!("备份失败（继续重置）: {}", e)),
         }
 
-        // 生成新 ID
         let new_ids = self.generate_new_ids();
         details.push("已生成新 Machine ID".to_string());
 
-        // 写入所有位置
         let apply_details = self.apply_ids(&new_ids)?;
         details.extend(apply_details);
 
@@ -184,7 +184,7 @@ impl IdentityService {
         })
     }
 
-    /// 从备份恢复 Machine ID
+    /// 从结构化备份恢复 Machine ID
     pub fn restore_from_backup(&self, backup_path: &str) -> Result<RestoreResult, AppError> {
         let mut details = Vec::new();
 
@@ -227,12 +227,6 @@ impl IdentityService {
 
         if let Some(parent) = machine_id_path.parent() {
             std::fs::create_dir_all(parent)?;
-        }
-
-        if machine_id_path.exists() {
-            let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-            let backup = format!("{}.bak.{}", machine_id_path.to_string_lossy(), timestamp);
-            let _ = std::fs::copy(&machine_id_path, backup);
         }
 
         std::fs::write(&machine_id_path, dev_device_id)?;

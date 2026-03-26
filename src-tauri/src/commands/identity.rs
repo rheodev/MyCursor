@@ -134,7 +134,7 @@ pub async fn complete_cursor_reset(
 ) -> Result<ResetResult, String> {
     let mut result = service.reset().map_err(|e| e.to_string())?;
 
-    // 修改 main.js
+    // 修改 main.js（不再额外生成散落备份文件，统一依赖结构化 backup）
     if let Some(main_js) = &service.cursor().paths.main_js {
         if main_js.exists() {
             match modify_main_js(main_js) {
@@ -150,10 +150,6 @@ pub async fn complete_cursor_reset(
 /// 修改 main.js，移除 getMachineId/getMacMachineId 的硬编码返回
 fn modify_main_js(path: &std::path::Path) -> Result<(), String> {
     let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let backup = format!("{}.backup.{}", path.display(), timestamp);
-    std::fs::copy(path, &backup).map_err(|e| e.to_string())?;
 
     let patterns = vec![
         (
@@ -209,15 +205,13 @@ pub async fn get_machine_id_file_content() -> Result<Option<String>, String> {
 #[tauri::command]
 #[specta::specta]
 pub async fn get_backup_directory_info(
-    service: State<'_, IdentityService>,
+    _service: State<'_, IdentityService>,
 ) -> Result<(String, Vec<String>), String> {
-    let (storage_path, _) = service.get_cursor_paths();
-    let dir = std::path::Path::new(&storage_path)
-        .parent()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_default();
+    let data_dir = crate::get_data_dir()?;
+    let dir = data_dir.join("backup");
+    let dir_str = dir.to_string_lossy().to_string();
 
-    let files = if std::path::Path::new(&dir).exists() {
+    let files = if dir.exists() {
         std::fs::read_dir(&dir)
             .map_err(|e| e.to_string())?
             .filter_map(|e| e.ok())
@@ -227,7 +221,7 @@ pub async fn get_backup_directory_info(
         Vec::new()
     };
 
-    Ok((dir, files))
+    Ok((dir_str, files))
 }
 
 /// 获取自动更新状态
