@@ -114,8 +114,13 @@ npm run format       # 格式化
 ```
 MyCursor/
 ├── src/                        # React 前端
+│   ├── features/               # 按业务域组织的页面与局部组件 / hooks
+│   │   ├── identity/           # Machine ID 管理
+│   │   ├── accounts/           # 账号管理
+│   │   ├── analytics/          # 用量统计
+│   │   ├── seamless/           # 无感换号
+│   │   └── settings/           # 设置
 │   ├── components/             # 通用 UI 组件（卡片 / 表单 / 图表等）
-│   ├── pages/                  # 页面（Machine ID / 账号管理 / 无感换号 / 用量统计 / 设置）
 │   ├── services/               # 服务层（账户、Machine ID、用量统计、配置等）
 │   ├── hooks/                  # 自定义 Hooks
 │   ├── types/                  # TypeScript 类型

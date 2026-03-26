@@ -6,7 +6,7 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { hybridStorage } from "@/utils/hybridStorage";
 
 const MachineIdPage = lazy(() => import("@/features/identity/IdentityPage"));
-const AccountManagePage = lazy(() => import("@/features/accounts/AccountsPage"));
+const AccountsPage = lazy(() => import("@/features/accounts/AccountsPage"));
 const UsageStatsPage = lazy(() => import("@/features/analytics/AnalyticsPage"));
 const SeamlessPage = lazy(() => import("@/features/seamless/SeamlessPage"));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
@@ -215,7 +215,7 @@ function App() {
           >
             <div key={currentPage} className="animate-fadeIn">
               {currentPage === "machineId" && <MachineIdPage />}
-              {currentPage === "account" && <AccountManagePage />}
+              {currentPage === "account" && <AccountsPage />}
               {currentPage === "seamless" && <SeamlessPage />}
               {currentPage === "usage" && <UsageStatsPage />}
               {currentPage === "settings" && <SettingsPage />}
